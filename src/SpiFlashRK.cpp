@@ -1,10 +1,29 @@
-#include "Particle.h"
 
+#include <Arduino.h>
+#include <DSPI.h>
 #include "SpiFlashRK.h"
 
+DSPI0 _flash_spi;
 
-SpiFlash::SpiFlash(SPIClass &spi, int cs) : spi(spi), cs(cs) {
+void SpiFlash::initcs(){
+	pinMode(cs_pin, OUTPUT);
+}
+void SpiFlash::csResetFast(){
+	digitalWrite(cs_pin, LOW);
+}
+void SpiFlash::csSetFast(){
+	digitalWrite(cs_pin, HIGH);
+}
+void SpiFlash::pinResetFast(uint8_t cs_pin){
+	digitalWrite(cs_pin, LOW);
+}
+void SpiFlash::pinSetFast(uint8_t cs_pin){
+	digitalWrite(cs_pin, HIGH);
+}
 
+SpiFlash::SpiFlash(int cs){
+	cs_pin = cs;
+	initcs();
 }
 
 SpiFlash::~SpiFlash() {
@@ -12,12 +31,10 @@ SpiFlash::~SpiFlash() {
 }
 
 void SpiFlash::begin() {
-	spi.begin(cs);
-	digitalWrite(cs, HIGH);
-
-	if (!sharedBus) {
-		setSpiSettings();
-	}
+	_flash_spi.begin(cs_pin);
+	csSetFast();
+    
+	setSpiSettings();
 
 	// Send release from powerdown 0xab
 	wakeFromSleep();
@@ -31,28 +48,18 @@ bool SpiFlash::isValid() {
 
 
 void SpiFlash::beginTransaction() {
-	if (sharedBus) {
-		setSpiSettings();
-		// Changing the SPI settings seems to leave the bus unstable for a period of time.
-		if (sharedBusDelay != 0) {
-			delayMicroseconds(sharedBusDelay);
-		}
-	}
-	pinResetFast(cs);
-
-	// There is some code to do this in the STM32F2xx HAL, but I don't think it's necessary to put
-	// a really tiny delay before doing the SPI transfer
-	// asm("mov r2, r2");
+	csResetFast();
 }
 
 void SpiFlash::endTransaction() {
-	pinSetFast(cs);
+	csSetFast();
 }
 
 void SpiFlash::setSpiSettings() {
-	spi.setBitOrder(spiBitOrder); // Default: MSBFIRST
-	spi.setClockSpeed(spiClockSpeedMHz, MHZ); // Default: 30
-	spi.setDataMode(SPI_MODE3); // Default: SPI_MODE3
+	_flash_spi.disableInterruptTransfer();
+	_flash_spi.setTransferSize(DSPI_8BIT);
+	_flash_spi.setSpeed(20000000); // Default: 30
+	_flash_spi.setMode(DSPI_MODE3); // Default: SPI_MODE3
 }
 
 
@@ -60,11 +67,9 @@ uint32_t SpiFlash::jedecIdRead() {
 
 	uint8_t txBuf[4], rxBuf[4];
 	txBuf[0] = 0x9f;
-
 	beginTransaction();
-	spi.transfer(txBuf, rxBuf, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf), txBuf, rxBuf);
 	endTransaction();
-
 	return (rxBuf[1] << 16) | (rxBuf[2] << 8) | (rxBuf[3]);
 }
 
@@ -74,7 +79,7 @@ uint8_t SpiFlash::readStatus() {
 	txBuf[1] = 0;
 
 	beginTransaction();
-	spi.transfer(txBuf, rxBuf, sizeof(txBuf), NULL);
+	_flash_spi.transfer( sizeof(txBuf), txBuf, rxBuf);
 	endTransaction();
 
 	return rxBuf[1];
@@ -111,7 +116,7 @@ void SpiFlash::writeStatus(uint8_t status) {
 	txBuf[1] = status;
 
 	beginTransaction();
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf), txBuf);
 	endTransaction();
 }
 
@@ -132,8 +137,8 @@ void SpiFlash::readData(size_t addr, void *buf, size_t bufLen) {
 		setInstWithAddr(0x03, addr, txBuf); // READ
 
 		beginTransaction();
-		spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
-		spi.transfer(NULL, curBuf, bufLen, NULL);
+		_flash_spi.transfer(sizeof(txBuf), txBuf);
+		_flash_spi.transfer(bufLen, (uint8_t) 0x00, curBuf);
 		endTransaction();
 
 		addr += count;
@@ -174,8 +179,8 @@ void SpiFlash::writeData(size_t addr, const void *buf, size_t bufLen) {
 		writeEnable();
 
 		beginTransaction();
-		spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
-		spi.transfer(curBuf, NULL, count, NULL);
+		_flash_spi.transfer(sizeof(txBuf), txBuf);
+		_flash_spi.transfer(count, curBuf);
 		endTransaction();
 
 		waitForWriteComplete(pageProgramTimeoutMs);
@@ -204,7 +209,7 @@ void SpiFlash::sectorErase(size_t addr) {
 	writeEnable();
 
 	beginTransaction();
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf), txBuf);
 	endTransaction();
 
 	waitForWriteComplete(sectorEraseTimeoutMs);
@@ -220,7 +225,7 @@ void SpiFlash::blockErase(size_t addr) {
 	writeEnable();
 
 	beginTransaction();
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf), txBuf);
 	endTransaction();
 
 	waitForWriteComplete(chipEraseTimeoutMs);
@@ -237,7 +242,7 @@ void SpiFlash::chipErase() {
 	writeEnable();
 
 	beginTransaction();
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf), txBuf);
 	endTransaction();
 
 	waitForWriteComplete(chipEraseTimeoutMs);
@@ -251,7 +256,7 @@ void SpiFlash::resetDevice() {
 	txBuf[0] = 0x66; // Enable reset
 
 	beginTransaction();
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf),txBuf);
 	endTransaction();
 
 	delayMicroseconds(1);
@@ -259,7 +264,7 @@ void SpiFlash::resetDevice() {
 	txBuf[0] = 0x99; // Reset
 
 	beginTransaction();
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf),txBuf);
 	endTransaction();
 
 	delayMicroseconds(1);
@@ -271,7 +276,7 @@ void SpiFlash::wakeFromSleep() {
 	txBuf[0] = 0xab;
 
 	beginTransaction();
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf),txBuf);
 	endTransaction();
 
 	// Need to wait tres (3 microseconds) before issuing the next command
@@ -285,7 +290,7 @@ void SpiFlash::deepPowerDown() {
 	txBuf[0] = 0xb9;
 
 	beginTransaction();
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf), txBuf);
 	endTransaction();
 
 	// Need to wait tdp (10 microseconds) before issuing the next command, but since we're probably doing
@@ -298,7 +303,7 @@ void SpiFlash::writeEnable() {
 
 	beginTransaction();
 	txBuf[0] = 0x06; // WREN
-	spi.transfer(txBuf, NULL, sizeof(txBuf), NULL);
+	_flash_spi.transfer(sizeof(txBuf), txBuf);
 	endTransaction();
 
 	// ISSI devices require a 3us delay here, but Winbond devices do not
@@ -307,46 +312,4 @@ void SpiFlash::writeEnable() {
 	}
 }
 
-#if PLATFORM_ID==8
-
-#include "spi_flash.h"
-
-SpiFlashP1::SpiFlashP1() {
-
-}
-SpiFlashP1::~SpiFlashP1() {
-
-}
-
-void SpiFlashP1::begin() {
-	sFLASH_Init();
-}
-
-bool SpiFlashP1::isValid() {
-	// TODO: Check the value from jedecIdRead
-	return true;
-}
-
-uint32_t SpiFlashP1::jedecIdRead() {
-	return sFLASH_ReadID();
-}
-
-void SpiFlashP1::readData(size_t addr, void *buf, size_t bufLen) {
-	sFLASH_ReadBuffer((uint8_t *)buf, addr,  bufLen);
-}
-
-void SpiFlashP1::writeData(size_t addr, const void *buf, size_t bufLen) {
-	sFLASH_WriteBuffer((const uint8_t *)buf, addr, bufLen);
-}
-
-void SpiFlashP1::sectorErase(size_t addr) {
-	sFLASH_EraseSector(addr);
-}
-
-void SpiFlashP1::chipErase() {
-	sFLASH_EraseBulk();
-}
-
-
-#endif
 

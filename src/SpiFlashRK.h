@@ -9,7 +9,9 @@
 #ifndef __SPIFLASHRK_H
 #define __SPIFLASHRK_H
 
-#include "Particle.h"
+#include "Arduino.h"
+#include <DSPI.h>
+//#include "Particle.h"
 
 /**
  * @brief Pure virtual base class SPI for SpiFlash devices
@@ -112,7 +114,7 @@ protected:
  */
 class SpiFlash : public SpiFlashBase {
 public:
-	SpiFlash(SPIClass &spi, int cs);
+	SpiFlash(int cs);
 	virtual ~SpiFlash();
 
 	/**
@@ -279,7 +281,7 @@ protected:
 	 * Most chips can use SPI_MODE0 or SPI_MODE3 but I've found that Winbond chips don't work very reliably in mode 0
 	 * so the default is SPI_MODE3, since both ISSI and Winbond chips work well with MODE3.
 	 */
-	uint8_t spiDataMode = SPI_MODE3;
+	uint8_t spiDataMode = DSPI_MODE3;
 
 	/**
 	 * @brief Maximum time to wait for a write call to complete in milliseconds.
@@ -343,10 +345,15 @@ private:
 	 */
 	void setInstWithAddr(uint8_t inst, size_t addr, uint8_t *buf);
 
-	SPIClass &spi;
-	int cs;
+	//SPIClass &spi;
+	
+	uint8_t cs_pin;
 	bool sharedBus = false;
-
+	void initcs();
+	void csSetFast();
+	void csResetFast();
+	void pinResetFast(uint8_t cs);
+	void pinSetFast(uint8_t cs);
 	unsigned long sharedBusDelay = 200; // microseconds
 };
 
@@ -355,7 +362,7 @@ private:
  */
 class SpiFlashISSI : public SpiFlash {
 public:
-	inline SpiFlashISSI(SPIClass &spi, int cs) : SpiFlash(spi, cs) {
+	inline SpiFlashISSI(int cs) : SpiFlash(cs) {
 		sectorEraseTimeoutMs = 300;
 		pageProgramTimeoutMs = 10; // 1 ms actually
 		chipEraseTimeoutMs = 6000;
@@ -369,7 +376,7 @@ public:
  */
 class SpiFlashWinbond : public SpiFlash {
 public:
-	inline SpiFlashWinbond(SPIClass &spi, int cs) : SpiFlash(spi, cs) {
+	inline SpiFlashWinbond(int cs) : SpiFlash(cs) {
 		sectorEraseTimeoutMs = 500;
 		pageProgramTimeoutMs = 10; // 3 ms actually
 		chipEraseTimeoutMs = 50000;
@@ -383,7 +390,7 @@ public:
  */
 class SpiFlashMacronix : public SpiFlash {
 public:
-	inline SpiFlashMacronix(SPIClass &spi, int cs) : SpiFlash(spi, cs) {
+	inline SpiFlashMacronix(int cs) : SpiFlash(cs) {
 		sectorEraseTimeoutMs = 200;
 		pageProgramTimeoutMs = 10; // 1 ms actually
  		chipEraseTimeoutMs = 6000;
@@ -392,30 +399,6 @@ public:
 	}
 
 };
-
-// P1 platform only
-#if PLATFORM_ID==8
-
-/**
- * @brief Wrapper for the 1 MB flash on the Particle P1 module
- *
- * This SPI flash chip is separate from the one on the STM32F205 module and isn't used by the system firmware
- * so the whole thing can be used for user firmware.
- */
-class SpiFlashP1 : public SpiFlashBase {
-public:
-	SpiFlashP1();
-	virtual ~SpiFlashP1();
-
-	virtual void begin();
-	virtual bool isValid();
-	virtual uint32_t jedecIdRead();
-	virtual void readData(size_t addr, void *buf, size_t bufLen);
-	virtual void writeData(size_t addr, const void *buf, size_t bufLen);
-	virtual void sectorErase(size_t addr);
-	virtual void chipErase();
-};
-#endif
 
 #endif /* __SPIFLASHRK_H */
 
