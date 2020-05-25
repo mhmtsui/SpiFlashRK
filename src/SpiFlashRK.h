@@ -9,9 +9,15 @@
 #ifndef __SPIFLASHRK_H
 #define __SPIFLASHRK_H
 
-#include "Arduino.h"
+#include <Arduino.h>
+#include <LibPrintf.h>
 #include <DSPI.h>
 //#include "Particle.h"
+
+#ifndef log_e(_f, ...)
+#define log_e(_f, ...) printf(_f, ## __VA_ARGS__)
+#endif
+
 
 /**
  * @brief Pure virtual base class SPI for SpiFlash devices

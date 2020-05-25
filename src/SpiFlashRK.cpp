@@ -48,11 +48,11 @@ bool SpiFlash::isValid() {
 
 
 void SpiFlash::beginTransaction() {
-	csResetFast();
+	csResetFast();noInterrupts();
 }
 
 void SpiFlash::endTransaction() {
-	csSetFast();
+	csSetFast();interrupts();
 }
 
 void SpiFlash::setSpiSettings() {
@@ -104,7 +104,7 @@ void SpiFlash::waitForWriteComplete(unsigned long timeout) {
 		}
 	}
 
-	// Log.trace("isWriteInProgress=%d time=%u", isWriteInProgress(), millis() - startTime);
+	log_e("isWriteInProgress=%d time=%u", isWriteInProgress(), millis() - startTime);
 }
 
 
@@ -170,7 +170,7 @@ void SpiFlash::writeData(size_t addr, const void *buf, size_t bufLen) {
 			count = bufLen;
 		}
 
-		// Log.info("writeData addr=%lx pageOffset=%lu pageStart=%lu count=%lu pageSize=%lu", addr, pageOffset, pageStart, count, pageSize);
+		log_e("writeData addr=%lx pageOffset=%lu pageStart=%lu count=%lu pageSize=%lu", addr, pageOffset, pageStart, count, pageSize);
 
 		uint8_t txBuf[4];
 
@@ -198,7 +198,7 @@ void SpiFlash::sectorErase(size_t addr) {
 
 	uint8_t txBuf[4];
 
-	// Log.trace("sectorEraseCmd=%02x", sectorEraseCmd);
+	log_e("sectorEraseCmd=%02x", addr);
 
 	//
 	// ISSI 25LQ080 uses 0x20 or 0xD7
