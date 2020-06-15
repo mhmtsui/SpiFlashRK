@@ -13,11 +13,16 @@
 #include <LibPrintf.h>
 #include <DSPI.h>
 //#include "Particle.h"
-
+//#define DEBUG
+#ifdef DEBUG
 #ifndef log_e(_f, ...)
 #define log_e(_f, ...) printf(_f, ## __VA_ARGS__)
 #endif
-
+#else
+#ifndef log_e(_f, ...)
+#define log_e(_f, ...) //printf(_f, ## __VA_ARGS__)
+#endif
+#endif
 
 /**
  * @brief Pure virtual base class SPI for SpiFlash devices
