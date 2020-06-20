@@ -9,12 +9,14 @@
 
 DSPI0 _flash_spi;
 #define _FLASH_SPI_BASE _DSPI0_BASE
-//#define ASYNC_ENA
+#define ASYNC_ENA
 #ifdef ASYNC_ENA
 volatile uint8_t __attribute__((coherent)) txBuf_g[4];
 volatile uint8_t __attribute__((coherent)) rxBuf_g[4];
+volatile uint8_t __attribute__((coherent)) txpageBuf_g[PAGE_SIZE];
+volatile uint8_t __attribute__((coherent)) rxpageBuf_g[PAGE_SIZE];
 #endif
-#define INT_ENA
+//#define INT_ENA
 
 void SpiFlash::initcs(){
 	pinMode(cs_pin, OUTPUT);
@@ -47,7 +49,7 @@ void SpiFlash::begin() {
 	//_flash_spi.begin(cs_pin);
 #else
 	_flash_spi.begin(cs_pin);
-	log_e("init stat %x", _flash_spi.spistat());
+	log_d("init stat %x", _flash_spi.spistat());
 #endif
 	csSetFast();
     
@@ -62,10 +64,10 @@ void SpiFlash::begin() {
 	//pspi->sxBuf.reg = 0;
 	//uint8_t dump = pspi->sxBuf.reg;
 	//(void)dump;
-	log_e("wake from Sleep %ul\r\n", _flash_spi.spistat());
+	log_d("wake from Sleep %ul\r\n", _flash_spi.spistat());
 	// Send release from powerdown 0xab
 	wakeFromSleep();
-	log_e("BEGIN end\r\n");
+	log_d("BEGIN end\r\n");
 }
 
 bool SpiFlash::isValid() {
@@ -96,33 +98,41 @@ void SpiFlash::setSpiSettings() {
 
 
 uint32_t SpiFlash::jedecIdRead() {
-// #ifdef ASYNC_ENA
-// 	txBuf_g[0] = 0x9f;
-// 	txBuf_g[1] = 0x00;
-// 	txBuf_g[2] = 0x00;
-// 	txBuf_g[3] = 0x00;
-// 	rxBuf_g[0] = 0x00;
-// 	rxBuf_g[1] = 0x00;
-// 	rxBuf_g[2] = 0x00;
-// 	rxBuf_g[3] = 0x00;
-// #else
+ #ifdef ASYNC_ENA
+	txBuf_g[0] = 0x9f;
+	txBuf_g[1] = 0x00;
+	txBuf_g[2] = 0x00;
+	txBuf_g[3] = 0x00;
+	rxBuf_g[0] = 0x00;
+	rxBuf_g[1] = 0x00;
+	rxBuf_g[2] = 0x00;
+	rxBuf_g[3] = 0x00;
+#else
 	uint8_t txBuf[4], rxBuf[4];
 	txBuf[0] = 0x9f;
-	uint8_t *ptr;
-	for (ptr = txBuf; ptr<txBuf+4;ptr++){
-		_cache(((1)|(5<<2)), ptr);
-	}
-	_sync();
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+4;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 
-//#endif
+#endif
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(1, (uint8_t*) txBuf, 50);
-	_flash_spi.asyncTransfertimeout(3, (uint8_t) 0, (uint8_t*) &rxBuf[1], 50);
-	for (ptr = rxBuf; ptr<rxBuf+4;ptr++){
-		_cache(((1)|(4<<2)), ptr);
-	}
-	_sync();
+	//_flash_spi.asyncTransfer(4, (uint8_t*) txBuf, (uint8_t*) rxBuf);
+	//do {
+	// 	delay(1);
+	// 	log_e("waiting %d %d %x %x %x %x\r\n", _flash_spi.transCount(), _flash_spi.isOverflow(), _flash_spi.intflag(), DCH4INT, DCH5INT, DCH4DSIZ);
+	//}while (DCH4INTbits.CHBCIF == 0 && DCH5INTbits.CHBCIF == 0);
+	_flash_spi.asyncTransfertimeout(4, (uint8_t*)txBuf_g, (uint8_t*)rxBuf_g, 50);
+	//_flash_spi.asyncTransfertimeout(4, (uint8_t*) txBuf,(uint8_t*)rxBuf, 50);
+	//_flash_spi.asyncTransfertimeout(1, (uint8_t*) txBuf, 50);
+	//_flash_spi.asyncTransfertimeout(3, (uint8_t) 0, (uint8_t*) rxBuf, 50);
+	//_flash_spi.asyncTransfertimeout(3, (uint8_t*) txBuf, (uint8_t*) rxBuf, 50);
+	// for (ptr = rxBuf; ptr<rxBuf+4;ptr++){
+	// 	_cache(((1)|(4<<2)), ptr);
+	// }
+	// _sync();
 	//_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, (uint8_t *) rxBuf_g, 50);
 	//log_e("isoverflow:%d",_flash_spi.isOverflow());
 	//_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, (uint8_t *) rxBuf_g, 50);
@@ -142,9 +152,11 @@ uint32_t SpiFlash::jedecIdRead() {
 #ifdef ASYNC_ENA
 	//return (rxBuf_g[1] << 16) | (rxBuf_g[2] << 8) | (rxBuf_g[3]);
 	//return ((ptr1[1]) << 16) | ((ptr1[2]) << 8) | ((ptr1[3]));
-	return (rxBuf[1] << 16) | (rxBuf[2] << 8) | (rxBuf[3]);
+	log_e("JEDEC:%x %x %x %x \r\n", rxBuf_g[0], rxBuf_g[1], rxBuf_g[2], rxBuf_g[3]);
+	return (rxBuf_g[1] << 16) | (rxBuf_g[2] << 8) | (rxBuf_g[3] << 0);// | (rxBuf[3]);
 #else
 	//_cache(((1)|(4<<2)), rxBuf);
+	log_e("JEDEC:%x %x %x %x \r\n", rxBuf[0], rxBuf[1], rxBuf[2], rxBuf[3]);
 	return (rxBuf[1] << 16) | (rxBuf[2] << 8) | (rxBuf[3]);
 #endif
 }
@@ -159,12 +171,18 @@ uint8_t SpiFlash::readStatus() {
 	uint8_t txBuf[2], rxBuf[2];
 	txBuf[0] = 0x05;
 	txBuf[1] = 0;
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+4;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 #endif
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(2, (uint8_t *) txBuf_g, (uint8_t *) rxBuf_g, 50);
+	//_flash_spi.asyncTransfer(1, (uint8_t*) txBuf_g);
+	//_flash_spi.asyncTransfertimeout(1, (uint8_t) 0, (uint8_t *) rxBuf_g, 50);
 	//_flash_spi.asyncTransfertimeout(1, txBuf, 50);
-	//_flash_spi.asyncTransfertimeout(1, (uint8_t)0x00, rxBuf, 50);
+	_flash_spi.asyncTransfertimeout(2, (uint8_t*) txBuf_g, (uint8_t*) rxBuf_g, 50);
 	// _flash_spi.intTransfer(1, txBuf);
 	// do {
 	// 	delay(1);
@@ -175,8 +193,14 @@ uint8_t SpiFlash::readStatus() {
 	// 	delay(1);
 	// 	log_e("waiting %d %d %x\r\n", _flash_spi.transCount(), _flash_spi.isOverflow(), _flash_spi.intflag());
 	// }while (_flash_spi.transCount() != 0);	
+	// for (ptr = rxBuf; ptr<rxBuf+4;ptr++){
+	// 	_cache(((1)|(4<<2)), ptr);
+	// }
+	// _sync();
+	log_d("Read Status:%x %x\r\n", rxBuf_g[0], rxBuf_g[1]);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, rxBuf, 50);
+	log_d("Read Status:%x %x\r\n", rxBuf[0], rxBuf[1]);
 #else
 	_flash_spi.transfer( sizeof(txBuf), txBuf, rxBuf);
 #endif
@@ -203,9 +227,9 @@ void SpiFlash::waitForWriteComplete(unsigned long timeout) {
 	// Wait for up to 500 ms. Most operations should take much less than that.
 	while(isWriteInProgress() && millis() - startTime < timeout) {
 		// For long timeouts, yield the CPU
-		//if (timeout > 10) {
+		if (timeout > 10) {
 			delay(1);
-		//}
+		}
 	}
 
 	log_e("isWriteInProgress=%d time=%u\r\n", isWriteInProgress(), millis() - startTime);
@@ -222,9 +246,14 @@ void SpiFlash::writeStatus(uint8_t status) {
 	txBuf[0] = 0x01;
 	txBuf[1] = status;
 #endif
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+2;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(2,(uint8_t *)  txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(2,(uint8_t *)  txBuf_g, (uint8_t*) rxBuf_g, 50);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 #else
@@ -245,16 +274,28 @@ void SpiFlash::readData(size_t addr, void *buf, size_t bufLen) {
 		if (count > bufLen) {
 			count = bufLen;
 		}
+		log_d("%d %d %d %d\r\n", count, bufLen, pageOffset, pageStart);
 #ifdef ASYNC_ENA
 		setInstWithAddr(0x03, addr, (uint8_t *) txBuf_g);
 #else
 		uint8_t txBuf[4];
 		setInstWithAddr(0x03, addr, txBuf); // READ
 #endif
+		//uint8_t *ptr;
+		// for (ptr = txBuf; ptr<txBuf+4;ptr++){
+		// 	_cache(((1)|(5<<2)), ptr);
+		// }
+		// _sync();
 		beginTransaction();
 #ifdef ASYNC_ENA
-		_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, 50);
-		_flash_spi.asyncTransfertimeout(bufLen, (uint8_t) 0x00, curBuf, 50);
+		_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, (uint8_t *) rxBuf_g, 50);
+		//_flash_spi.asyncTransfer(4, (uint8_t *) txBuf_g);
+		//do {
+		//	delay(1);
+		//	log_e("%x\r\n", DCH5INT);
+		//}while (DCH5INTbits.CHBCIF == 0);	
+
+		_flash_spi.asyncTransfertimeout(bufLen, (uint8_t) 0x00, (uint8_t*) rxpageBuf_g, 50);
 #elif defined(INT_ENA)
 		_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 		_flash_spi.intTransfertimeout(bufLen, (uint8_t) 0x00, curBuf, 50);
@@ -263,16 +304,23 @@ void SpiFlash::readData(size_t addr, void *buf, size_t bufLen) {
 		_flash_spi.transfer(bufLen, (uint8_t) 0x00, curBuf);
 #endif
 		endTransaction();
+		// for (ptr = curBuf; ptr<curBuf+bufLen; ptr++){
+		// 	_cache(((1)|(4<<2)), ptr);
+		// }
+		// _sync();
+#ifdef ASYNC_ENA
+		memcpy((void *) curBuf, (void *) rxpageBuf_g, bufLen);
+#endif
 		addr += count;
 		curBuf += count;
 		bufLen -= count;
 	}
 #ifdef ASYNC_ENA
-	uint8_t * ptr;
-	for(ptr = (uint8_t *) buf; ptr < buf+bufLen_c; ptr++){
-		_cache(((1)|(4<<2)), ptr);
-	}
-	_sync();
+	// uint8_t * ptr;
+	// for(ptr = (uint8_t *) buf; ptr < buf+bufLen_c; ptr++){
+	// 	_cache(((1)|(4<<2)), ptr);
+	// }
+	// _sync();
 #endif
 }
 
@@ -282,21 +330,25 @@ void SpiFlash::setInstWithAddr(uint8_t inst, size_t addr, uint8_t *buf) {
 	buf[1] = (uint8_t) (addr >> 16);
 	buf[2] = (uint8_t) (addr >> 8);
 	buf[3] = (uint8_t) addr;
+	// uint8_t *ptr;
+	// for (ptr = buf; ptr<buf+4;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 }
 
 
 void SpiFlash::writeData(size_t addr, const void *buf, size_t bufLen) {
 	uint8_t *curBuf = (uint8_t *)buf;
 	size_t bufLen_c = bufLen;
-#ifdef ASYNC_ENA
-	uint8_t * ptr;
-	for(ptr = (uint8_t *) buf; ptr < buf+bufLen_c; ptr++){
-		_cache(((1)|(5<<2)), ptr);
-	}
-	_sync();
-#endif
 	waitForWriteComplete();
-
+#ifdef ASYNC_ENA
+	// uint8_t * ptr;
+	// for(ptr = (uint8_t *) buf; ptr < buf+bufLen_c; ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
+#endif
 	while(bufLen > 0) {
 		size_t pageOffset = addr % pageSize;
 		size_t pageStart = addr - pageOffset;
@@ -305,20 +357,30 @@ void SpiFlash::writeData(size_t addr, const void *buf, size_t bufLen) {
 		if (count > bufLen) {
 			count = bufLen;
 		}
-
 		log_e("writeData addr=%lx pageOffset=%lu pageStart=%lu count=%lu pageSize=%lu\r\n", addr, pageOffset, pageStart, count, pageSize);
+		writeEnable();
 #ifdef ASYNC_ENA
 		setInstWithAddr(0x02, addr, (uint8_t *) txBuf_g);
 #else
 		uint8_t txBuf[4];
 		setInstWithAddr(0x02, addr, txBuf); // PAGE_PROG
 #endif
-		writeEnable();
-
+		// uint8_t *ptr;
+		// for (ptr = txBuf; ptr<txBuf+4;ptr++){
+		// 	_cache(((1)|(5<<2)), ptr);
+		// }
+		// _sync();
+		// for (ptr = curBuf; ptr<curBuf+count; ptr++){
+		// 	_cache(((1)|(5<<2)), ptr);
+		// }
+		// _sync();
+#ifdef ASYNC_ENA
+		memcpy((void *)txpageBuf_g, (void *)curBuf, count);
+#endif
 		beginTransaction();
 #ifdef ASYNC_ENA
-		_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, 50);
-		_flash_spi.asyncTransfertimeout(count, curBuf, 50);
+		_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, (uint8_t*) rxBuf_g, 50);
+		_flash_spi.asyncTransfertimeout(count, (uint8_t*)txpageBuf_g, (uint8_t*) rxpageBuf_g, 50);
 #elif defined(INT_ENA)
 		_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 		_flash_spi.intTransfertimeout(count, curBuf, 50);
@@ -340,11 +402,11 @@ void SpiFlash::writeData(size_t addr, const void *buf, size_t bufLen) {
 
 void SpiFlash::sectorErase(size_t addr) {
 	waitForWriteComplete();
-#ifndef ASYNC_ENA
+//#ifndef ASYNC_ENA
 	uint8_t txBuf[4];
-#endif
+//#endif
 	log_e("sectorEraseCmd=%02x\r\n", addr);
-
+	writeEnable();
 	//
 	// ISSI 25LQ080 uses 0x20 or 0xD7
 	// Winbond uses 0x20 only, so use that
@@ -353,12 +415,16 @@ void SpiFlash::sectorErase(size_t addr) {
 #else
 	setInstWithAddr(0x20, addr, txBuf); // SECTOR_ER
 #endif
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+4;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 
-	writeEnable();
 
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, (uint8_t *)rxBuf_g, 50);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 #else
@@ -371,17 +437,22 @@ void SpiFlash::sectorErase(size_t addr) {
 
 void SpiFlash::blockErase(size_t addr) {
 	waitForWriteComplete();
+	writeEnable();
 #ifdef ASYNC_ENA
 	setInstWithAddr(0xD8, addr, (uint8_t *) txBuf_g);
 #else
 	uint8_t txBuf[4];
 	setInstWithAddr(0xD8, addr, txBuf); // BLOCK_ER
 #endif
-	writeEnable();
-
+	
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+4;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(4, (uint8_t *) txBuf_g, (uint8_t *)rxBuf_g, 50);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 #else
@@ -395,17 +466,21 @@ void SpiFlash::blockErase(size_t addr) {
 
 void SpiFlash::chipErase() {
 	waitForWriteComplete();
+	writeEnable();
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+1;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 #ifdef ASYNC_ENA
 	txBuf_g[0] = 0xC7;
 #else
 	uint8_t txBuf[1];
 	txBuf[0] = 0xC7; // CHIP_ER
 #endif
-	writeEnable();
-
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(1, (uint8_t *) txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(txBuf_g[0], 50);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 #else
@@ -424,9 +499,14 @@ void SpiFlash::resetDevice() {
 	uint8_t txBuf[1];
 	txBuf[0] = 0x66; // Enable reset
 #endif
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+1;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(1, (uint8_t *) txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(txBuf_g[0], 50);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 #else
@@ -440,9 +520,14 @@ void SpiFlash::resetDevice() {
 #else
 	txBuf[0] = 0x99; // Reset
 #endif
+	//uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+1;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(1, (uint8_t *) txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(txBuf_g[0], 50);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 #else
@@ -461,17 +546,23 @@ void SpiFlash::wakeFromSleep() {
 	uint8_t txBuf[1];
 	txBuf[0] = 0xab;
 #endif
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+1;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 	beginTransaction();
-	log_e("%ul", _flash_spi.spistat());
+	//log_e("%ul", _flash_spi.spistat());
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(1, (uint8_t *) txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(txBuf_g[0], 50);
 #elif defined(INT_ENA)
-	log_e("BEGIN INTERRUPT\r\n");
-	_flash_spi.intTransfer(1, txBuf);
-	while (_flash_spi.transCount() != 0){
-		log_e("%d", _flash_spi.isOverflow());
-		delay(1);
-	}
+	// log_d("BEGIN INTERRUPT\r\n");
+	// _flash_spi.intTransfer(1, txBuf);
+	// while (_flash_spi.transCount() != 0){
+	// 	log_d("%d", _flash_spi.isOverflow());
+	// 	delay(1);
+	// }
+	_flash_spi.intTransfertimeout(1, txBuf, 50);
 #else
 	_flash_spi.transfer(1, &txBuf);
 #endif
@@ -489,9 +580,14 @@ void SpiFlash::deepPowerDown() {
 	uint8_t txBuf[1];
 	txBuf[0] = 0xb9;
 #endif
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+1;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(1, (uint8_t *) txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(txBuf_g[0], 50);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 #else
@@ -511,9 +607,14 @@ void SpiFlash::writeEnable() {
 	uint8_t txBuf[1];
 	txBuf[0] = 0x06; //WREN
 #endif
+	// uint8_t *ptr;
+	// for (ptr = txBuf; ptr<txBuf+1;ptr++){
+	// 	_cache(((1)|(5<<2)), ptr);
+	// }
+	// _sync();
 	beginTransaction();
 #ifdef ASYNC_ENA
-	_flash_spi.asyncTransfertimeout(1, (uint8_t *) txBuf_g, 50);
+	_flash_spi.asyncTransfertimeout(txBuf_g[0], 50);
 #elif defined(INT_ENA)
 	_flash_spi.intTransfertimeout(sizeof(txBuf), txBuf, 50);
 #else

@@ -12,9 +12,24 @@
 #include <Arduino.h>
 #include <LibPrintf.h>
 #include <DSPI.h>
-//#include "Particle.h"
+
+#ifndef PAGE_SIZE
+#define PAGE_SIZE 256
+#endif
+
 //#define DEBUG
 #ifdef DEBUG
+#ifndef log_d(_f, ...)
+#define log_d(_f, ...) printf(_f, ## __VA_ARGS__)
+#endif
+#else
+#ifndef log_d(_f, ...)
+#define log_d(_f, ...) //printf(_f, ## __VA_ARGS__)
+#endif
+#endif
+
+#define ERROR
+#ifdef ERROR
 #ifndef log_e(_f, ...)
 #define log_e(_f, ...) printf(_f, ## __VA_ARGS__)
 #endif
@@ -23,6 +38,7 @@
 #define log_e(_f, ...) //printf(_f, ## __VA_ARGS__)
 #endif
 #endif
+
 
 /**
  * @brief Pure virtual base class SPI for SpiFlash devices
@@ -263,6 +279,12 @@ public:
 	 */
 	inline SpiFlash &withSharedBus(unsigned long delayus) { sharedBus = true; sharedBusDelay = delayus; return *this;};
 
+	/**
+	 * @brief Enables writes to the status register, flash writes, and erases.
+	 *
+	 * This is used internally before the functions that require it.
+	 */
+	void writeEnable();
 protected:
 	// Flags for the status register
 	static const uint8_t STATUS_WIP 	= 0x01;
@@ -321,14 +343,8 @@ protected:
 	 */
 	unsigned long writeEnableDelayUs = 3;
 
-private:
-	/**
-	 * @brief Enables writes to the status register, flash writes, and erases.
-	 *
-	 * This is used internally before the functions that require it.
-	 */
-	void writeEnable();
 
+private:
 	/**
 	 * @brief Begins an SPI transaction, setting the CS line LOW.
 	 * Also sets the SPI speed and mode settings if sharedBus == true
@@ -392,7 +408,7 @@ public:
 		pageProgramTimeoutMs = 10; // 3 ms actually
 		chipEraseTimeoutMs = 50000;
 		manufacturerId = 0xef;
-		writeEnableDelayUs = 0;
+		writeEnableDelayUs = 3;
 	}
 };
 
