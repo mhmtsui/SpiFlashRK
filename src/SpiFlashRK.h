@@ -17,8 +17,8 @@
 #define PAGE_SIZE 256
 #endif
 
-//#define DEBUG
-#ifdef DEBUG
+//#define SPIFLASH_DEBUG
+#ifdef SPIFLASH_DEBUG
 #ifndef log_d(_f, ...)
 #define log_d(_f, ...) printf(_f, ## __VA_ARGS__)
 #endif
@@ -28,8 +28,8 @@
 #endif
 #endif
 
-#define ERROR
-#ifdef ERROR
+//#define SPIFLASH_ERROR
+#ifdef SPIFLASH_ERROR
 #ifndef log_e(_f, ...)
 #define log_e(_f, ...) printf(_f, ## __VA_ARGS__)
 #endif
