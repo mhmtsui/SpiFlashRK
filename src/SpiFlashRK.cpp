@@ -13,8 +13,8 @@ DSPI0 _flash_spi;
 #ifdef ASYNC_ENA
 volatile uint8_t __attribute__((coherent)) txBuf_g[4];
 volatile uint8_t __attribute__((coherent)) rxBuf_g[4];
-volatile uint8_t __attribute__((coherent)) txpageBuf_g[PAGE_SIZE];
-volatile uint8_t __attribute__((coherent)) rxpageBuf_g[PAGE_SIZE];
+volatile uint8_t __attribute__((coherent)) txpageBuf_g[PAGE_SIZE + 1];
+volatile uint8_t __attribute__((coherent)) rxpageBuf_g[PAGE_SIZE + 1];
 #endif
 //#define INT_ENA
 
